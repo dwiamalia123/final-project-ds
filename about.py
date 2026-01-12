@@ -76,7 +76,7 @@ def show():
         st.markdown(
             """
             Kualitas wine berperan penting dalam membentuk kepuasan konsumen, memengaruhi keputusan pembelian, serta persepsi terhadap merek. Namun, penilaian kualitas wine sering kali bersifat subjektif karena dipengaruhi oleh preferensi individu, pengalaman, dan standar penilaian yang berbeda-beda. Kondisi ini membuat proses evaluasi kualitas menjadi tidak selalu konsisten.
-            </div>
+            /n
             Untuk membantu memberikan penilaian yang lebih objektif dan terukur, dataset Wine Quality menyediakan data karakteristik fisikokimia wine—seperti tingkat keasaman, kandungan gula, pH, dan kadar alkohol—yang diukur melalui pengujian laboratorium. Data ini dapat digunakan untuk menganalisis faktor-faktor yang memengaruhi kualitas wine serta membangun model machine learning guna memprediksi skor quality berdasarkan fitur-fitur tersebut.
             """
         )
@@ -132,5 +132,6 @@ def show():
         )
 
     st.markdown("</div>", unsafe_allow_html=True)
+
 
 

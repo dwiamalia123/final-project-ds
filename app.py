@@ -270,8 +270,7 @@ st.markdown(
     """
     <div class="hero">
       <div>
-        <div class="hero-title">🍷 Wine Quality</div>
-        <div class="hero-sub">Analysis • Dashboard • Machine Learning • Prediction App</div>
+        <div class="hero-title">🍷 Wine Quality Prediction</div>
         <div class="hero-meta">Final Project – Data Analytics & Data Science • January 2026</div>
         <div>
           <span class="chip"> EDA & Insights</span>

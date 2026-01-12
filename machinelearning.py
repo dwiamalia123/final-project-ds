@@ -1,19 +1,14 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
 
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression, Ridge, Lasso
 from sklearn.metrics import mean_absolute_error, r2_score
-import joblib
 
-try:
-    from statsmodels.stats.outliers_influence import variance_inflation_factor
-    _HAS_STATSMODELS = True
-except Exception:
-    _HAS_STATSMODELS = False
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+import joblib
 
 
 def mean_absolute_percentage_error(y_true, y_pred):
@@ -23,6 +18,9 @@ def mean_absolute_percentage_error(y_true, y_pred):
 
 
 def show():
+    # =========================
+    # CSS
+    # =========================
     st.markdown(
         """
         <style>
@@ -78,6 +76,9 @@ def show():
     st.markdown("<div class='wrap'>", unsafe_allow_html=True)
     st.subheader("Machine Learning")
 
+  
+    # Load & Cleaning
+  
     df = pd.read_csv("9. Wine Quality.csv")
 
     before_dup = df.shape[0]
@@ -100,9 +101,7 @@ def show():
             <div class="pill">Duplicate removed: {dup_removed:,}</div>
             <div class="pill">Missing removed: {na_removed:,}</div>
             <ul>
-              <li>
-                Tidak ditemukan missing value & duplikat dihapus untuk memastikan kualitas data stabil sebelum modeling.
-              </li>
+              <li>Duplikasi dan missing value dihapus untuk memastikan kualitas data stabil sebelum modeling.</li>
             </ul>
           </div>
         </div>
@@ -110,6 +109,7 @@ def show():
         unsafe_allow_html=True
     )
 
+    # 1) IQR outlier removal
     st.write("### 1. Handling Outlier dengan IQR")
 
     numbers = df.select_dtypes(include="number").columns.tolist()
@@ -132,10 +132,7 @@ def show():
             <div class="pill">Sesudah: {after_rows:,}</div>
             <div class="pill-warn">Terhapus: {outlier_removed:,}</div>
             <ul>
-              <li>
-                Deteksi outlier menggunakan metode <b>IQR</b>, kemudian outlier dihapus agar model lebih robust
-                dan tidak terlalu dipengaruhi nilai ekstrem.
-              </li>
+              <li>Outlier dihapus agar model lebih robust dan tidak terlalu dipengaruhi nilai ekstrem.</li>
             </ul>
           </div>
         </div>
@@ -143,59 +140,39 @@ def show():
         unsafe_allow_html=True
     )
 
+    # 2) VIF
     st.write("### 2. Cek Multikolinearitas (VIF) & Pemilihan Fitur")
 
     X_full = df.drop("quality", axis=1)
     y = df["quality"]
 
-    if _HAS_STATSMODELS:
-        try:
-            vif_values = []
-            for i in range(X_full.shape[1]):
-                vif_values.append(variance_inflation_factor(X_full.values, i))
+    # VIF table (tampilkan dulu)
+    vif_values = [variance_inflation_factor(X_full.values, i) for i in range(X_full.shape[1])]
+    vif_df = pd.DataFrame({"feature": X_full.columns, "VIF": vif_values}).sort_values("VIF", ascending=False)
 
-            vif_df = pd.DataFrame({
-                "feature": X_full.columns,
-                "VIF": vif_values
-            }).sort_values("VIF", ascending=False)
+    st.markdown(
+        """
+        <div class="card list-tight">
+          <p class="title">Nilai VIF</p>
+          <div class="insight">
+            <ul>
+              <li>VIF tinggi mengindikasikan multikolinearitas sehingga koefisien model linear bisa kurang stabil.</li>
+              <li>Dalam project ini, <b>density</b> dan <b>pH</b dihapus karena VIF sangat tinggi untuk meningkatkan stabilitas & interpretabilitas.</li>
+            </ul>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    st.dataframe(vif_df.style.format({"VIF": "{:.2f}"}), use_container_width=True)
 
-            st.markdown(
-                """
-                <div class="card list-tight">
-                  <p class="title">Nilai VIF</p>
-                  <div class="insight">
-                    <ul>
-                      <li>
-                        VIF tinggi mengindikasikan multikolinearitas, sehingga koefisien model linear bisa jadi tidak stabil.
-                      </li>
-                      <li>
-                        Density dan pH memiliki VIF ekstrem, sehingga keduanya dihapus untuk membuat model lebih stabil & interpretatif.
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-            st.dataframe(
-                vif_df.style.format({"VIF": "{:.2f}"}),
-                use_container_width=True
-            )
-
-        except Exception as e:
-            st.warning(f"Gagal menghitung VIF: {e}")
-    else:
-        st.info("Statsmodels tidak tersedia, jadi perhitungan VIF tidak bisa ditampilkan di environment ini.")
-
+    # Drop columns
     X = X_full.copy()
-    dropped_cols = []
-    for c in ["density", "pH"]:
-        if c in X.columns:
-            dropped_cols.append(c)
+    dropped_cols = [c for c in ["density", "pH"] if c in X.columns]
     if dropped_cols:
         X = X.drop(columns=dropped_cols)
 
+    # Feature summary (setelah VIF)
     st.markdown(
         f"""
         <div class="card list-tight">
@@ -204,13 +181,14 @@ def show():
             <div class="pill">Jumlah fitur awal: {X_full.shape[1]}</div>
             <div class="pill">Jumlah fitur akhir: {X.shape[1]}</div>
             <div class="pill-warn">Dropped: {", ".join(dropped_cols) if dropped_cols else "-"}</div>
-            </div>
+            <div class="muted">Urutan fitur ini akan disimpan dan dipakai kembali pada Prediction App.</div>
           </div>
         </div>
         """,
         unsafe_allow_html=True
     )
 
+    # 3) Train-test split
     st.write("### 3. Train–Test Split (80/20)")
 
     X_train_raw, X_test_raw, y_train, y_test = train_test_split(
@@ -230,6 +208,7 @@ def show():
         unsafe_allow_html=True
     )
 
+    # 4) StandardScaler
     st.write("### 4. Normalisasi dengan StandardScaler")
 
     scaler = StandardScaler()
@@ -239,12 +218,10 @@ def show():
     st.markdown(
         """
         <div class="card list-tight">
-          <p class="title">Nomalisasi dengan StandarScalers</p>
+          <p class="title">Normalisasi StandardScaler</p>
           <div class="insight">
             <ul>
-              <li>
-                Pada <b>Ridge</b> & <b>Lasso</b>, fitur perlu berada pada skala yang sebanding agar penalti regularisasi bekerja adil.
-              </li>
+              <li>Pada <b>Ridge</b> & <b>Lasso</b> fitur dinormalisasi menggunakan Standar Scaler agar penalti regularisasi bekerja adil.</li>
             </ul>
           </div>
         </div>
@@ -252,6 +229,7 @@ def show():
         unsafe_allow_html=True
     )
 
+    # 5) Tuning alpha
     st.write("### 5. Tuning Hyperparameter (Alpha) untuk Ridge & Lasso")
 
     alphas = np.logspace(-3, 3, 20)
@@ -288,6 +266,7 @@ def show():
         unsafe_allow_html=True
     )
 
+    # 6) Train models
     linear = LinearRegression()
     linear.fit(X_train_raw, y_train)
 
@@ -297,6 +276,7 @@ def show():
     lasso = Lasso(alpha=best_lasso_alpha, max_iter=30000)
     lasso.fit(X_train_scaled, y_train)
 
+    # 6b) Intercept & Coef
     st.write("### 6. Intercept & Koefisien Model")
 
     def coef_df(model, cols):
@@ -326,36 +306,23 @@ def show():
         st.dataframe(coef_lasso.style.format({"coefficient": "{:.4f}"}), use_container_width=True, height=360)
 
     st.markdown(
-    """
-    <div class="card list-tight">
-      <p class="title">Interpretasi Koefisien & Intercept</p>
-      <div class="insight">
-        <ul>
-          <li>
-            Koefisien <b>positif</b> menunjukkan bahwa peningkatan nilai fitur cenderung
-            <b>meningkatkan</b> skor <i>quality</i>, sedangkan koefisien <b>negatif</b>
-            cenderung <b>menurunkan</b> skor <i>quality</i>.
-          </li>
-          <li>
-            <b>Linear Regression</b> memiliki intercept <b>2,09</b>, yang menunjukkan baseline
-            prediksi relatif rendah dan model lebih sensitif terhadap variasi serta noise data.
-          </li>
-          <li>
-            <b>Ridge</b> dan <b>Lasso Regression</b> memiliki intercept yang sama yaitu <b>5,61</b>,
-            mendekati rata-rata nilai <i>quality</i>, sehingga menghasilkan baseline prediksi
-            yang lebih stabil setelah proses standardisasi dan regularisasi.
-          </li>
-          <li>
-            <b>Ridge Regression</b> dipilih sebagai model utama karena mampu menangani
-            <b>multikolinearitas</b> dengan lebih baik, menjaga seluruh fitur tetap berkontribusi,
-            dan memberikan prediksi yang lebih stabil dibandingkan Linear dan Lasso Regression.
-          </li>
-        </ul>
-      </div>
-    </div>
-    """,
-    unsafe_allow_html=True)
+        """
+        <div class="card list-tight">
+          <p class="title">Interpretasi Koefisien & Intercept</p>
+          <div class="insight">
+            <ul>
+              <li><b>Koefisien positif</b> → peningkatan fitur cenderung <b>meningkatkan</b> nilai <i>quality</i>, sedangkan <b>koefisien negatif</b> cenderung <b>menurunkan</b> nilai <i>quality</i>.</li>
+              <li><b>Linear (intercept = 2,09)</b> → baseline prediksi lebih rendah dan lebih sensitif terhadap variasi/noise data.</li>
+              <li><b>Ridge & Lasso (intercept = 5,61)</b> → baseline lebih mendekati rata-rata <i>quality</i> dan lebih stabil setelah standardisasi/regularisasi.</li>
+              <li><b>Ridge dipilih</b> karena lebih kuat menghadapi multikolinearitas, menjaga semua fitur tetap berkontribusi, dan prediksinya lebih stabil dibanding Linear & Lasso.</li>
+            </ul>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
+    # 7) Evaluation
     st.write("### 7. Evaluasi Model")
 
     def eval_reg(y_true, y_pred):
@@ -363,7 +330,7 @@ def show():
             "MAE": mean_absolute_error(y_true, y_pred),
             "MAPE (%)": mean_absolute_percentage_error(y_true, y_pred),
             "RMSE": float(np.sqrt(np.mean((y_true - y_pred) ** 2))),
-            "R2": float(r2_score(y_true, y_pred))
+            "R2": float(r2_score(y_true, y_pred)),
         }
 
     y_pred_linear = linear.predict(X_test_raw)
@@ -377,27 +344,52 @@ def show():
     }
 
     results_df = pd.DataFrame(results).T.sort_values("RMSE")
+
     st.dataframe(
         results_df.style.format({
-            "MAE": "{:.3f}",
+            "MAE": "{:.4f}",
             "MAPE (%)": "{:.2f}",
-            "RMSE": "{:.3f}",
-            "R2": "{:.3f}"
+            "RMSE": "{:.4f}",
+            "R2": "{:.4f}"
         }),
         use_container_width=True
     )
 
-    best_model_name = results_df.index[0]
+    st.markdown(
+        """
+        <div class="card list-tight">
+          <p class="title">Makna Metrik Evaluasi</p>
+          <div class="insight">
+            <ul>
+              <li><b>MAE</b> (Mean Absolute Error): rata-rata selisih absolut prediksi vs aktual (lebih kecil = lebih baik).</li>
+              <li><b>MAPE</b> (Mean Absolute Percentage Error): rata-rata error dalam persen terhadap nilai aktual (lebih kecil = lebih baik).</li>
+              <li><b>RMSE</b> (Root Mean Squared Error): mirip MAE tapi memberi penalti lebih besar untuk error besar (lebih kecil = lebih baik).</li>
+              <li><b>R²</b> (Coefficient of Determination): proporsi variasi data yang bisa dijelaskan model (lebih besar = lebih baik).</li>
+            </ul>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
     st.markdown(
-        f"""
+        """
         <div class="card list-tight">
-          <p class="title">Kesimpulan Evaluasi</p>
+          <p class="title">Insight Evaluasi Model</p>
           <div class="insight">
-            <div class="pill-warn">Best Model (by RMSE): {best_model_name}</div>
             <ul>
               <li>
-                Ridge Regression dipilih sebagai model utama karena memberikan keseimbangan terbaik antara error prediksi dan stabilitas pada fitur yang saling berkorelasi.
+                <b>Linear Regression</b> menghasilkan <b>MAE 0.4607</b> dan <b>R² 0.3549</b>, artinya rata-rata kesalahan prediksi sekitar <b>0.46</b>
+                dan model hanya mampu menjelaskan <b>35.5%</b> variasi kualitas wine. Sebagai baseline, performanya cukup baik, tetapi cenderung kurang stabil
+                untuk pola data yang lebih kompleks.
+              </li>
+              <li>
+                <b>Ridge Regression</b> memberikan performa terbaik dengan <b>MAE 0.4610</b>, <b>RMSE terendah 0.5792</b>, dan <b>R² tertinggi 0.3580</b>.
+                Ini menunjukkan keseimbangan terbaik antara error prediksi dan kemampuan menjelaskan variasi kualitas wine, serta lebih stabil pada kondisi multikolinearitas.
+              </li>
+              <li>
+                <b>Lasso Regression</b> menghasilkan <b>MAE 0.4608</b>, <b>RMSE 0.5802</b>, dan <b>R² 0.3556</b>, performanya hampir setara dengan Linear Regression,
+                namun regularisasi L1 pada dataset ini belum memberikan peningkatan signifikan dibanding Ridge Regression.
               </li>
             </ul>
           </div>
@@ -406,6 +398,65 @@ def show():
         unsafe_allow_html=True
     )
 
+    best_model_name = results_df.index[0]
+    st.markdown(
+        f"""
+        <div class="card list-tight">
+          <p class="title">Kesimpulan Evaluasi</p>
+          <div class="insight">
+            <div class="pill-warn">Best Model (by RMSE): {best_model_name}</div>
+            <ul>
+              <li>Ridge Regression dipilih sebagai model utama karena paling stabil untuk fitur yang saling berkorelasi (multikolinearitas).</li>
+              <li class="muted">Catatan: error prediksi masih mungkin terjadi karena <b>R²</b> masih sekitar <b>0.35</b> (model baru menjelaskan ~35% variasi data).</li>
+            </ul>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    # 8. Kesimpulan & Rekomendasi
+    st.write("### 8. Kesimpulan & Rekomendasi")
+
+    st.markdown(
+        """
+        <div class="card list-tight">
+          <p class="title">Kesimpulan</p>
+          <div class="insight">
+            <ul>
+              <li>
+                Multikolinearitas terdeteksi pada beberapa fitur. Nilai VIF menunjukkan multikolinearitas tinggi terutama pada
+                <b>density</b> dan <b>pH</b>, sehingga keduanya dihapus agar model lebih stabil dan mudah diinterpretasikan.
+              </li>
+              <li>
+                Analisis model menunjukkan fitur seperti <b>alcohol</b>, <b>sulphates</b>, dan <b>volatile acidity</b>
+                memiliki pengaruh signifikan terhadap kualitas wine.
+              </li>
+              <li>
+                <b>Ridge Regression</b> dengan alpha terbaik hasil tuning memberikan performa terbaik berdasarkan
+                RMSE, MAE, MAPE, dan R².
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="card list-tight">
+          <p class="title">Rekomendasi</p>
+          <div class="insight">
+            <ul>
+              <li>Gunakan <b>Ridge Regression</b> sebagai model utama karena paling seimbang antara akurasi dan stabilitas pada fitur yang saling berkorelasi.</li>
+              <li>Fokus pada faktor kimia kunci seperti <b>alcohol</b>, <b>volatile acidity</b>, dan <b>sulphates</b>.</li>
+              <li>Pengembangan lanjut: coba model non-linear (mis. <i>Random Forest</i>) untuk menangkap pola yang tidak linear.</li>
+              <li>Validasi eksternal: uji pada dataset wine lain sebelum dipakai secara operasional.</li>
+            </ul>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # 9) Save artifacts (Ridge as best))
     joblib.dump(scaler, "wine_scaler.pkl")
     joblib.dump(ridge, "wine_best_model.pkl")
     joblib.dump(X_train_raw.columns.tolist(), "wine_model_features.pkl")
@@ -418,50 +469,3 @@ def show():
     }
     joblib.dump(metadata, "wine_model_metadata.pkl")
 
-    st.write("### 8. Kesimpulan & Rekomendasi")
-
-    st.markdown(
-        """
-        <div class="card list-tight">
-          <p class="title">Kesimpulan</p>
-          <div class="insight">
-            <ul>
-              <li>
-                Multikolinearitas terdeteksi pada beberapa fitur. Nilai VIF menunjukkan multikolinearitas tinggi
-                terutama pada <b>density</b> dan <b>pH</b>, sehingga keduanya dihapus agar model lebih stabil dan mudah diinterpretasikan.
-              </li>
-              <li>
-                Analisis model menunjukkan fitur seperti <b>alcohol</b>, <b>sulphates</b>, dan <b>volatile acidity</b>
-                memiliki pengaruh signifikan terhadap kualitas wine.
-              </li>
-              <li>
-                <b>Ridge Regression</b> dengan alpha terbaik hasil tuning memberikan performa terbaik berdasarkan RMSE, MAE, MAPE, dan R².
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        <div class="card list-tight">
-          <p class="title">Rekomendasi</p>
-          <div class="insight">
-            <ul>
-              <li>
-                Gunakan <b>Ridge Regression</b> sebagai model utama karena paling seimbang antara akurasi dan stabilitas pada fitur yang saling berkorelasi.
-              </li>
-              <li>
-                Fokus pada faktor kimia kunci seperti <b>alcohol</b>, <b>volatile acidity</b>, dan <b>sulphates</b>.
-              </li>
-              <li>
-                Pengembangan lanjut: coba model non-linear (mis. <i>Random Forest</i>) untuk menangkap pola yang tidak linear.
-              </li>
-              <li>
-                Validasi eksternal: uji pada dataset wine lain sebelum dipakai secara operasional.
-              </li>
-            </ul>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    st.markdown("</div>", unsafe_allow_html=True)
